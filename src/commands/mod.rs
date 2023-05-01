@@ -912,6 +912,14 @@ struct UtilCompletionArgs {
     /// jj util completion --fish | source
     #[arg(long, verbatim_doc_comment)]
     fish: bool,
+    /// Print a completion script for Nu
+    ///
+    /// Apply it by running this:
+    ///
+    /// jj util completion --nu | save -f jj.nu
+    /// use jj.nu
+    #[arg(long, verbatim_doc_comment)]
+    nu: bool,
     /// Print a completion script for Zsh
     ///
     /// Apply it by running this:
@@ -3090,16 +3098,24 @@ fn cmd_util(
 ) -> Result<(), CommandError> {
     match subcommand {
         UtilCommands::Completion(completion_matches) => {
-            let mut app = command.app().clone();
-            let mut buf = vec![];
-            let shell = if completion_matches.zsh {
-                clap_complete::Shell::Zsh
+            let app = command.app().clone();
+
+            fn generate(mut app: clap::Command, shell: impl clap_complete::Generator) -> Vec<u8> {
+                let mut buf = vec![];
+                clap_complete::generate(shell, &mut app, "jj", &mut buf);
+                buf
+            }
+
+            let buf = if completion_matches.zsh {
+                generate(app, clap_complete::Shell::Zsh)
             } else if completion_matches.fish {
-                clap_complete::Shell::Fish
+                generate(app, clap_complete::Shell::Fish)
+            } else if completion_matches.nu {
+                generate(app, clap_complete_nushell::Nushell)
             } else {
-                clap_complete::Shell::Bash
+                generate(app, clap_complete::Shell::Bash)
             };
-            clap_complete::generate(shell, &mut app, "jj", &mut buf);
+
             ui.stdout_formatter().write_all(&buf)?;
         }
         UtilCommands::Mangen(_mangen_matches) => {
